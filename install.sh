@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
-IFS=$'\n\t'
+IFS=$'
+	'
 
 OWNER="sunmingyang"
 ENC_REPO="ops-scripts-enc"
@@ -40,7 +41,7 @@ b64_decode() {
 ensure_deps_apt() {
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -y
-  apt-get install -y --no-install-recommends ca-certificates curl tar age
+  apt-get install -y --no-install-recommends ca-certificates curl tar age python3
 }
 
 write_age_key() {
@@ -59,6 +60,20 @@ raw_base() {
   echo "https://raw.githubusercontent.com/${OWNER}/${ENC_REPO}/${ENC_BRANCH}/${DIST_DIR}"
 }
 
+api_latest_name() {
+  local api_url json name
+
+  api_url="https://api.github.com/repos/${OWNER}/${ENC_REPO}/contents/${DIST_DIR}/latest.txt?ref=${ENC_BRANCH}"
+
+  # GitHub raw can be cached; API content is the source of truth.
+  json="$(curl -fsSL -H 'Accept: application/vnd.github+json' "$api_url")" || return 1
+
+  name="$(printf '%s' "$json" | python3 -c 'import json,sys,base64; j=json.load(sys.stdin); c=j.get("content",""); c="".join(c.split()); print(base64.b64decode(c).decode("utf-8").strip())')" || return 1
+
+  [ -n "$name" ] || return 1
+  printf '%s' "$name"
+}
+
 download_and_install() {
   local ref_file="${1:-}"
   local base url_latest pkg_name tmp
@@ -69,8 +84,13 @@ download_and_install() {
   if [ -n "$ref_file" ]; then
     pkg_name="$ref_file"
   else
-    url_latest="${base}/latest.txt"
-    pkg_name="$(curl -fsSL "$url_latest")"
+    # Prefer GitHub API to avoid raw cache staleness; fallback to raw with cache-bust.
+    if pkg_name="$(api_latest_name)"; then
+      :
+    else
+      url_latest="${base}/latest.txt?ts=$(date +%s)"
+      pkg_name="$(curl -fsSL "$url_latest")"
+    fi
   fi
 
   curl -fsSL -o "$tmp/pkg.age" "${base}/${pkg_name}"
