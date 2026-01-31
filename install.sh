@@ -51,9 +51,11 @@ write_age_key() {
   fi
 
   mkdir -p "$(dirname "$AGE_KEY_FILE")"
+  old_umask="$(umask)"
   umask 077
   printf "%s" "$AGE_KEY_B64" | b64_decode > "$AGE_KEY_FILE"
   chmod 600 "$AGE_KEY_FILE"
+  umask "$old_umask"
 }
 
 raw_base() {
@@ -101,7 +103,14 @@ download_and_install() {
   tar -C "$INSTALL_DIR" -xzf "$tmp/pkg.tar.gz"
 
   chmod +x "$INSTALL_DIR/bin/"* 2>/dev/null || true
-  ln -sf "$INSTALL_DIR/bin/ops" "$OPS_LINK"
+  # Use a wrapper instead of symlink so ops can locate its real bin/ directory.
+  cat > "$OPS_LINK" <<'EOF'
+#!/usr/bin/env bash
+exec /opt/ops-scripts/bin/ops "$@"
+EOF
+  chmod +x "$OPS_LINK"
+
+  chmod 755 "$INSTALL_DIR" || true
 
   echo "$pkg_name" > "$INSTALL_DIR/.ops-scripts-package"
   chmod 0644 "$INSTALL_DIR/.ops-scripts-package" || true
@@ -109,7 +118,7 @@ download_and_install() {
   rm -rf "$tmp"
 
   echo "OK: installed to $INSTALL_DIR"
-  echo "OK: ops linked at $OPS_LINK"
+  echo "OK: ops installed at $OPS_LINK"
   echo "OK: installed package $(cat "$INSTALL_DIR/.ops-scripts-package" 2>/dev/null || true)"
   echo "Try: ops list"
 }
