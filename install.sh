@@ -103,10 +103,14 @@ download_and_install() {
   chmod +x "$INSTALL_DIR/bin/"* 2>/dev/null || true
   ln -sf "$INSTALL_DIR/bin/ops" "$OPS_LINK"
 
+  echo "$pkg_name" > "$INSTALL_DIR/.ops-scripts-package"
+  chmod 0644 "$INSTALL_DIR/.ops-scripts-package" || true
+
   rm -rf "$tmp"
 
   echo "OK: installed to $INSTALL_DIR"
   echo "OK: ops linked at $OPS_LINK"
+  echo "OK: installed package $(cat "$INSTALL_DIR/.ops-scripts-package" 2>/dev/null || true)"
   echo "Try: ops list"
 }
 
